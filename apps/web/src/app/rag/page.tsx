@@ -1,6 +1,6 @@
 "use client";
 
-import ChatInterface from "@/components/chat";
+import RAGInterface from "@/components/rag";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -13,10 +13,10 @@ import { Toaster } from "@/components/ui/sonner";
 import React from "react";
 
 /**
- * The default page (/).
- * Contains the generic chat interface.
+ * The /rag page.
+ * Contains the interface for interacting with the RAG system.
  */
-export default function ChatPage(): React.ReactNode {
+export default function RAGPage(): React.ReactNode {
   return (
     <React.Suspense fallback={<div>Loading (layout)...</div>}>
       <Toaster />
@@ -30,13 +30,13 @@ export default function ChatPage(): React.ReactNode {
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbPage>Chat</BreadcrumbPage>
+                <BreadcrumbPage>RAG</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
         </div>
       </header>
-      <ChatInterface />
+      <RAGInterface />
     </React.Suspense>
   );
 }

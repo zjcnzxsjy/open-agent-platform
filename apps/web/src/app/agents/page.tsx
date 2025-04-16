@@ -1,6 +1,6 @@
 "use client";
 
-import ChatInterface from "@/components/chat";
+import AgentsInterface from "@/components/agents";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -13,10 +13,10 @@ import { Toaster } from "@/components/ui/sonner";
 import React from "react";
 
 /**
- * The default page (/).
- * Contains the generic chat interface.
+ * The /agents page.
+ * Contains the list of all agents the user has access to.
  */
-export default function ChatPage(): React.ReactNode {
+export default function AgentsPage(): React.ReactNode {
   return (
     <React.Suspense fallback={<div>Loading (layout)...</div>}>
       <Toaster />
@@ -30,13 +30,13 @@ export default function ChatPage(): React.ReactNode {
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbPage>Chat</BreadcrumbPage>
+                <BreadcrumbPage>Agents</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
         </div>
       </header>
-      <ChatInterface />
+      <AgentsInterface />
     </React.Suspense>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import ChatInterface from "@/components/chat";
+import InboxInterface from "@/components/inbox";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -13,10 +13,10 @@ import { Toaster } from "@/components/ui/sonner";
 import React from "react";
 
 /**
- * The default page (/).
- * Contains the generic chat interface.
+ * The /inbox page.
+ * Contains the Agent Inbox like UI/UX for interacting with interrupted threads.
  */
-export default function ChatPage(): React.ReactNode {
+export default function InboxPage(): React.ReactNode {
   return (
     <React.Suspense fallback={<div>Loading (layout)...</div>}>
       <Toaster />
@@ -30,13 +30,13 @@ export default function ChatPage(): React.ReactNode {
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbPage>Chat</BreadcrumbPage>
+                <BreadcrumbPage>Inbox</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
         </div>
       </header>
-      <ChatInterface />
+      <InboxInterface />
     </React.Suspense>
   );
 }

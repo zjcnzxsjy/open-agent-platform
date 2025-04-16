@@ -1,6 +1,6 @@
 "use client";
 
-import ChatInterface from "@/components/chat";
+import ToolsInterface from "@/components/tools";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -13,10 +13,10 @@ import { Toaster } from "@/components/ui/sonner";
 import React from "react";
 
 /**
- * The default page (/).
- * Contains the generic chat interface.
+ * The /tools page.
+ * Contains the list of tools the user has access to.
  */
-export default function ChatPage(): React.ReactNode {
+export default function ToolsPage(): React.ReactNode {
   return (
     <React.Suspense fallback={<div>Loading (layout)...</div>}>
       <Toaster />
@@ -30,13 +30,13 @@ export default function ChatPage(): React.ReactNode {
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbPage>Chat</BreadcrumbPage>
+                <BreadcrumbPage>Tools</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
         </div>
       </header>
-      <ChatInterface />
+      <ToolsInterface />
     </React.Suspense>
   );
 }
