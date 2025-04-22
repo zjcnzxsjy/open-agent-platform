@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -8,28 +9,22 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { TooltipIconButton } from "@/components/ui/tooltip-icon-button";
 import { useAgents } from "@/hooks/use-agents";
 import { configSchemaToConfigurableFields } from "@/lib/ui-config";
 import { ConfigurableFieldUIMetadata } from "@/types/configurable";
-import { Bot, CirclePlus, LoaderCircle } from "lucide-react";
+import { Bot, LoaderCircle, Pencil, Trash, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAgentsContext } from "@/providers/Agents";
 import { AgentFieldsForm, AgentFieldsFormLoading } from "../agent-form";
+import { Agent } from "@/types/agent";
 
-interface CreateAgentDialogProps {
-  agentId: string;
-  deploymentId: string;
-  graphId: string;
+interface EditAgentDialogProps {
+  agent: Agent;
 }
 
-export function CreateAgentDialog({
-  agentId,
-  deploymentId,
-  graphId,
-}: CreateAgentDialogProps) {
-  const { getAgentConfigSchema, createAgent } = useAgents();
+export function EditAgentDialog({ agent }: EditAgentDialogProps) {
+  const { getAgentConfigSchema, updateAgent, deleteAgent } = useAgents();
   const { refreshAgents } = useAgentsContext();
   const [configurations, setConfigurations] = useState<
     ConfigurableFieldUIMetadata[]
@@ -51,14 +46,25 @@ export function CreateAgentDialog({
       return;
 
     setLoading(true);
-    getAgentConfigSchema(agentId, deploymentId)
+    getAgentConfigSchema(agent.assistant_id, agent.deploymentId)
       .then((schemas) => {
         if (!schemas) return;
         const configFields = configSchemaToConfigurableFields(schemas);
-        setConfigurations(configFields);
+        const configFieldsWithDefaults = configFields.map((f) => {
+          const defaultConfig =
+            agent.config?.configurable?.[f.label] ?? f.default;
+          return {
+            ...f,
+            default: defaultConfig,
+          };
+        });
+        setConfigurations(configFieldsWithDefaults);
+        setName(agent.name);
+        setDescription((agent.metadata?.description ?? "") as string);
+        setConfig(agent.config?.configurable ?? {});
       })
       .finally(() => setLoading(false));
-  }, [agentId, deploymentId, open]);
+  }, [agent, open]);
 
   const handleSubmit = async (
     e: React.MouseEvent<HTMLButtonElement, MouseEvent>,
@@ -70,21 +76,45 @@ export function CreateAgentDialog({
     }
 
     setSubmitting(true);
-    const newAgent = await createAgent(deploymentId, graphId, {
-      name,
-      description,
-      config,
-    });
+    const updatedAgent = await updateAgent(
+      agent.deploymentId,
+      agent.assistant_id,
+      {
+        name,
+        description,
+        config,
+      },
+    );
     setSubmitting(false);
 
-    if (!newAgent) {
-      toast.error("Failed to create agent", {
+    if (!updatedAgent) {
+      toast.error("Failed to update agent", {
         description: "Please try again",
       });
       return;
     }
 
-    toast.success("Agent created successfully!");
+    toast.success("Agent updated successfully!");
+
+    setOpen(false);
+    clearState();
+    // Do not await so that the refresh is non-blocking
+    refreshAgents();
+  };
+
+  const handleDelete = async () => {
+    setSubmitting(true);
+    const deleted = await deleteAgent(agent.deploymentId, agent.assistant_id);
+    setSubmitting(false);
+
+    if (!deleted) {
+      toast.error("Failed to delete agent", {
+        description: "Please try again",
+      });
+      return;
+    }
+
+    toast.success("Agent deleted successfully!");
 
     setOpen(false);
     clearState();
@@ -96,6 +126,9 @@ export function CreateAgentDialog({
     setConfig({});
     setName("");
     setDescription("");
+    setConfigurations([]);
+    setLoading(false);
+    setSubmitting(false);
   };
 
   return (
@@ -109,20 +142,25 @@ export function CreateAgentDialog({
       }}
     >
       <AlertDialogTrigger asChild>
-        <TooltipIconButton
-          className="size-8"
-          tooltip="New Agent"
-          delayDuration={200}
+        <Button
+          variant="secondary"
+          className="flex items-center justify-center gap-1"
         >
-          <CirclePlus className="size-5" />
-        </TooltipIconButton>
+          <Pencil className="size-4" />
+          <span>Edit</span>
+        </Button>
       </AlertDialogTrigger>
       <AlertDialogContent className="h-auto max-h-[90vh] overflow-auto sm:max-w-lg md:max-w-2xl lg:max-w-3xl">
         <AlertDialogHeader>
-          <AlertDialogTitle>Create Agent</AlertDialogTitle>
+          <div className="flex items-center justify-between">
+            <AlertDialogTitle>Edit Agent</AlertDialogTitle>
+            <AlertDialogCancel>
+              <X className="size-4" />
+            </AlertDialogCancel>
+          </div>
           <AlertDialogDescription>
-            Create a new agent for &apos;
-            <span className="font-medium">{graphId}</span>&apos; graph.
+            Edit the agent for &apos;
+            <span className="font-medium">{agent.graph_id}</span>&apos; graph.
           </AlertDialogDescription>
         </AlertDialogHeader>
         {loading ? (
@@ -140,23 +178,21 @@ export function CreateAgentDialog({
         )}
         <AlertDialogFooter>
           <Button
-            onClick={(e) => {
-              e.preventDefault();
-              clearState();
-              setOpen(false);
-            }}
-            variant="outline"
+            onClick={handleDelete}
+            className="flex w-full items-center justify-center gap-1"
             disabled={loading || submitting}
+            variant="destructive"
           >
-            Cancel
+            {submitting ? <LoaderCircle className="animate-spin" /> : <Trash />}
+            <span>{submitting ? "Deleting..." : "Delete Agent"}</span>
           </Button>
           <Button
-            onClick={(e) => handleSubmit(e)}
+            onClick={handleSubmit}
             className="flex w-full items-center justify-center gap-1"
             disabled={loading || submitting}
           >
             {submitting ? <LoaderCircle className="animate-spin" /> : <Bot />}
-            <span>{submitting ? "Creating..." : "Create Agent"}</span>
+            <span>{submitting ? "Saving..." : "Save Changes"}</span>
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
