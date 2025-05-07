@@ -1,9 +1,10 @@
-import React from "react";
-import AuthLayout from "./auth-layout";
-import { AuthProvider } from "@/providers/Auth";
 import type { Metadata } from "next";
 import "../globals.css";
 import { Inter } from "next/font/google";
+import React from "react";
+import { NuqsAdapter } from "nuqs/adapters/next/app";
+import { SidebarLayout } from "@/components/sidebar";
+import { AuthProvider } from "@/providers/Auth";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -12,11 +13,11 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Open Agent Platform - Auth",
+  title: "Open Agent Platform",
   description: "Open Agent Platform by LangChain",
 };
 
-export default function Layout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
@@ -24,9 +25,11 @@ export default function Layout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <AuthProvider>
-          <AuthLayout>{children}</AuthLayout>
-        </AuthProvider>
+        <NuqsAdapter>
+          <AuthProvider>
+            <SidebarLayout>{children}</SidebarLayout>
+          </AuthProvider>
+        </NuqsAdapter>
       </body>
     </html>
   );
