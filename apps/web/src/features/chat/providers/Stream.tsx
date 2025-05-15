@@ -44,20 +44,38 @@ const StreamSession = ({
   children,
   agentId,
   deploymentId,
+  accessToken,
+  useProxyRoute,
 }: {
   children: ReactNode;
   agentId: string;
   deploymentId: string;
+  accessToken?: string;
+  useProxyRoute?: boolean;
 }) => {
-  const { session } = useAuthContext();
+  if (!useProxyRoute && !accessToken) {
+    toast.error("Access token must be provided if not using proxy route");
+  }
 
   const deployment = getDeployments().find((d) => d.id === deploymentId);
   if (!deployment) {
     throw new Error(`Deployment ${deploymentId} not found`);
   }
+
+  let deploymentUrl = deployment.deploymentUrl;
+  if (useProxyRoute) {
+    const baseApiUrl = process.env.NEXT_PUBLIC_BASE_API_URL;
+    if (!baseApiUrl) {
+      throw new Error(
+        "Failed to create client: Base API URL not configured. Please set NEXT_PUBLIC_BASE_API_URL",
+      );
+    }
+    deploymentUrl = `${baseApiUrl}/langgraph/proxy/${deploymentId}`;
+  }
+
   const [threadId, setThreadId] = useQueryState("threadId");
   const streamValue = useTypedStream({
-    apiUrl: deployment.deploymentUrl,
+    apiUrl: deploymentUrl,
     assistantId: agentId,
     threadId: threadId ?? null,
     onCustomEvent: (event, options) => {
@@ -70,8 +88,14 @@ const StreamSession = ({
       setThreadId(id);
     },
     defaultHeaders: {
-      Authorization: `Bearer ${session?.accessToken}`,
-      "x-supabase-access-token": session?.accessToken,
+      ...(!useProxyRoute
+        ? {
+            Authorization: `Bearer ${accessToken}`,
+            "x-supabase-access-token": accessToken,
+          }
+        : {
+            "x-auth-scheme": "langsmith",
+          }),
     },
   });
 
@@ -90,6 +114,7 @@ export const StreamProvider: React.FC<{ children: ReactNode }> = ({
   const [deploymentId, setDeploymentId] = useQueryState("deploymentId");
   const [value, setValue] = useState("");
   const [open, setOpen] = useState(false);
+  const { session } = useAuthContext();
 
   useEffect(() => {
     if (value || !agents.length) {
@@ -133,8 +158,9 @@ export const StreamProvider: React.FC<{ children: ReactNode }> = ({
               an agent to chat with.
             </p>
           </div>
-          <div className="mt-4 mb-24 flex items-center justify-center gap-4">
+          <div className="mb-24 grid grid-cols-[1fr_auto] gap-4 px-6 pt-4">
             <AgentsCombobox
+              disableDeselect
               agents={agents}
               agentsLoading={loading}
               value={value}
@@ -153,10 +179,18 @@ export const StreamProvider: React.FC<{ children: ReactNode }> = ({
     );
   }
 
+  const useProxyRoute = process.env.NEXT_PUBLIC_USE_LANGSMITH_AUTH === "true";
+  if (!useProxyRoute && !session?.accessToken) {
+    toast.error("Access token must be provided if not using proxy route");
+    return null;
+  }
+
   return (
     <StreamSession
       agentId={agentId}
       deploymentId={deploymentId}
+      accessToken={session?.accessToken ?? undefined}
+      useProxyRoute={useProxyRoute}
     >
       {children}
     </StreamSession>

@@ -11,29 +11,52 @@ import React, {
 import { getDeployments } from "@/lib/environment/deployments";
 import { Agent } from "@/types/agent";
 import { Deployment } from "@/types/deployment";
-import { isDefaultAssistant } from "@/lib/agent-utils";
+import { groupAgentsByGraphs, isDefaultAssistant } from "@/lib/agent-utils";
 import { useAgents } from "@/hooks/use-agents";
 import { extractConfigurationsFromAgent } from "@/lib/ui-config";
 import { createClient } from "@/lib/client";
 import { useAuthContext } from "./Auth";
 import { toast } from "sonner";
-import { Client } from "@langchain/langgraph-sdk";
+import { Assistant } from "@langchain/langgraph-sdk";
 
-async function createDefaultAssistant(client: Client, graphId: string, isDefault?: boolean) {
+async function getOrCreateDefaultAssistants(
+  deployment: Deployment,
+  accessToken?: string,
+): Promise<Assistant[]> {
+  const baseApiUrl = process.env.NEXT_PUBLIC_BASE_API_URL;
+  if (!baseApiUrl) {
+    throw new Error(
+      "Failed to get default assistants: Base API URL not configured. Please set NEXT_PUBLIC_BASE_API_URL",
+    );
+  }
+
   try {
-    const assistant = await client.assistants.create({
-      graphId,
-      name: `${isDefault ? "Default" : "Primary"} Assistant`,
-      metadata: {
-        description: `${isDefault ? "Default" : "Primary"}  Assistant`,
-        ...(isDefault && { _x_oap_is_default: true })
-      },
+    const url = `${baseApiUrl}/langgraph/defaults?deploymentId=${deployment.id}`;
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+    };
+
+    if (accessToken) {
+      headers["Authorization"] = `Bearer ${accessToken}`;
+    }
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers,
     });
-    return assistant;
-  } catch (e) {
-    console.error("Failed to create default assistant", e);
-    toast.error("Failed to create default assistant");
-    return undefined;
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        `Failed to get default assistants: ${response.status} ${response.statusText} ${errorData.error || ""}`,
+      );
+    }
+
+    const defaultAssistants = await response.json();
+    return defaultAssistants;
+  } catch (error) {
+    console.error("Error getting default assistants:", error);
+    throw error instanceof Error ? error : new Error(String(error));
   }
 }
 
@@ -49,53 +72,69 @@ async function getAgents(
     async (deployment) => {
       const client = createClient(deployment.id, accessToken);
 
-      const assistants = await client.assistants.search({
-        limit: 100,
+      const [defaultAssistants, allUserAssistants] = await Promise.all([
+        getOrCreateDefaultAssistants(deployment, accessToken),
+        client.assistants.search({
+          limit: 100,
+        }),
+      ]);
+      const assistantMap = new Map<string, Assistant>();
+
+      // Add default assistants to the map
+      defaultAssistants.forEach((assistant) => {
+        assistantMap.set(assistant.assistant_id, assistant);
       });
-      if (
-        !assistants.length
-      ) {
-        const defaultAssistant = await createDefaultAssistant(
-          client,
-          deployment.primaryGraphId,
-          deployment.isDefault,
-        );
-        if (!defaultAssistant) {
-          return [];
-        }
-        assistants.push(defaultAssistant);
-      }
 
-      const defaultAssistant =
-        assistants.find((a) => isDefaultAssistant(a as Agent)) ?? assistants[0];
-      const schema = await getAgentConfigSchema(
-        defaultAssistant.assistant_id,
-        deployment.id,
-      );
+      // Add user assistants to the map, potentially overriding defaults
+      allUserAssistants.forEach((assistant) => {
+        assistantMap.set(assistant.assistant_id, assistant);
+      });
 
-      const supportedConfigs: string[] = [];
-      if (schema) {
-        const { toolConfig, ragConfig, agentsConfig } =
-          extractConfigurationsFromAgent({
-            agent: defaultAssistant,
-            schema,
-          });
-        if (toolConfig.length) {
-          supportedConfigs.push("tools");
-        }
-        if (ragConfig.length) {
-          supportedConfigs.push("rag");
-        }
-        if (agentsConfig.length) {
-          supportedConfigs.push("supervisor");
-        }
-      }
+      // Convert map values back to array
+      const allAssistants: Assistant[] = Array.from(assistantMap.values());
 
-      return assistants.map((assistant) => ({
-        ...assistant,
-        deploymentId: deployment.id,
-        supportedConfigs: supportedConfigs as ["tools" | "rag" | "supervisor"],
-      }));
+      const assistantsGroupedByGraphs = groupAgentsByGraphs(allAssistants);
+
+      const assistantsPromise: Promise<Agent[]>[] =
+        assistantsGroupedByGraphs.map(async (group) => {
+          // We must get the agent config schema for each graph in a deployment,
+          // not just for each deployment, as a deployment can have multiple graphs
+          // each with their own unique config schema.
+          const defaultAssistant =
+            group.find((a) => isDefaultAssistant(a)) ?? group[0];
+          const schema = await getAgentConfigSchema(
+            defaultAssistant.assistant_id,
+            deployment.id,
+          );
+
+          const supportedConfigs: string[] = [];
+          if (schema) {
+            const { toolConfig, ragConfig, agentsConfig } =
+              extractConfigurationsFromAgent({
+                agent: defaultAssistant,
+                schema,
+              });
+            if (toolConfig.length) {
+              supportedConfigs.push("tools");
+            }
+            if (ragConfig.length) {
+              supportedConfigs.push("rag");
+            }
+            if (agentsConfig.length) {
+              supportedConfigs.push("supervisor");
+            }
+          }
+
+          return group.map((assistant) => ({
+            ...assistant,
+            deploymentId: deployment.id,
+            supportedConfigs: supportedConfigs as [
+              "tools" | "rag" | "supervisor",
+            ],
+          }));
+        });
+
+      return (await Promise.all(assistantsPromise)).flat();
     },
   );
 

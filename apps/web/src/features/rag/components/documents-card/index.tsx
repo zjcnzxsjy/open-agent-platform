@@ -28,6 +28,12 @@ import { DocumentsTable } from "./documents-table";
 import { Collection } from "@/types/collection";
 import { getCollectionName } from "../../hooks/use-rag";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useAgentsContext } from "@/providers/Agents";
+import { isUserSpecifiedDefaultAgent } from "@/lib/agent-utils";
+import { MessageSquare } from "lucide-react";
+import { Agent } from "@/types/agent";
+import { useRouter } from "next/navigation";
 
 interface DocumentsCardProps {
   selectedCollection: Collection | undefined;
@@ -40,6 +46,7 @@ export function DocumentsCard({
   currentPage,
   setCurrentPage,
 }: DocumentsCardProps) {
+  const router = useRouter();
   const {
     documents,
     handleFileUpload: handleDocumentFileUpload,
@@ -53,10 +60,13 @@ export function DocumentsCard({
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
+  const { agents } = useAgentsContext();
+  const defaultAgent = agents.find(isUserSpecifiedDefaultAgent);
+
   const filteredDocuments = useMemo(
     () =>
       documents.filter(
-        (doc) => doc.metadata.collection === selectedCollection?.name,
+        (doc) => doc.metadata.collection === selectedCollection?.uuid,
       ),
     [documents, selectedCollection],
   );
@@ -163,7 +173,7 @@ export function DocumentsCard({
     stagedFiles.forEach((file) => dataTransfer.items.add(file));
     const fileList = dataTransfer.files;
 
-    await handleDocumentFileUpload(fileList, selectedCollection.name);
+    await handleDocumentFileUpload(fileList, selectedCollection.uuid);
 
     toast.success("Files uploaded successfully", { richColors: true });
     setIsUploading(false);
@@ -182,7 +192,7 @@ export function DocumentsCard({
       const loadingToast = toast.loading("Uploading text document", {
         richColors: true,
       });
-      await handleDocumentTextUpload(textInput, selectedCollection.name);
+      await handleDocumentTextUpload(textInput, selectedCollection.uuid);
       setTextInput("");
       setIsUploading(false);
       toast.dismiss(loadingToast);
@@ -192,13 +202,47 @@ export function DocumentsCard({
     }
   };
 
+  const handleChatWithDocuments = async (agent: Agent) => {
+    if (!selectedCollection) {
+      toast.error("No collection selected", {
+        richColors: true,
+        description: "Please select a collection to chat with documents.",
+      });
+      return;
+    }
+    if (!agent.supportedConfigs?.includes("rag")) {
+      toast.error("Agent does not support rag", {
+        richColors: true,
+        description:
+          "Your default agent does not support RAG. Please contact an administrator to resolve this issue.",
+      });
+      return;
+    }
+
+    const chatQueryParams = new URLSearchParams({
+      agentId: agent.assistant_id,
+      deploymentId: agent.deploymentId,
+      chatWithCollectionId: selectedCollection.uuid,
+    })?.toString();
+    const chatPath = `/?${chatQueryParams}`;
+    router.push(chatPath);
+  };
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{`${getCollectionName(selectedCollection?.name)} Documents`}</CardTitle>
-        <CardDescription>
-          {"Manage documents in this collection"}
-        </CardDescription>
+      <CardHeader className="flex w-full items-center justify-between">
+        <div className="flex flex-col gap-2">
+          <CardTitle>
+            {getCollectionName(selectedCollection?.name)} Documents
+          </CardTitle>
+          <CardDescription>Manage documents in this collection</CardDescription>
+        </div>
+        {defaultAgent && (
+          <Button onClick={() => handleChatWithDocuments(defaultAgent)}>
+            <MessageSquare className="mr-2 h-3.5 w-3.5" />
+            Chat with your documents
+          </Button>
+        )}
       </CardHeader>
       <CardContent>
         <div className="mb-6">
@@ -352,6 +396,34 @@ export function DocumentsCard({
             </PaginationContent>
           </Pagination>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function DocumentsCardLoading() {
+  return (
+    <Card>
+      <CardHeader>
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-6 w-48" />
+      </CardHeader>
+      <CardContent>
+        <div className="mb-6 flex flex-col gap-6">
+          <div className="flex items-center justify-start gap-2">
+            <Skeleton className="h-6 w-22" />
+            <Skeleton className="h-6 w-22" />
+          </div>
+          <Skeleton className="h-38 w-full" />
+          <div className="flex flex-col gap-2">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <Skeleton
+                key={index}
+                className="h-8 w-full"
+              />
+            ))}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
